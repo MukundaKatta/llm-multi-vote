@@ -159,7 +159,9 @@ async def vote_async(
 
     norm = normalizer or default_normalizer
 
-    async def _invoke(name: str, fn: SyncVoterFn | AsyncVoterFn) -> tuple[str, str | Exception]:
+    async def _invoke(
+        name: str, fn: SyncVoterFn | AsyncVoterFn
+    ) -> tuple[str, str | Exception]:
         try:
             if inspect.iscoroutinefunction(fn):
                 raw = await fn(prompt)
@@ -249,12 +251,12 @@ def _aggregate(
 
     # confidence is winner_count / total_voters (failures count in denom).
     # If no winner, confidence is 0.0.
-    confidence = top_count / total_voters if winner is not None and total_voters > 0 else 0.0
+    confidence = (
+        top_count / total_voters if winner is not None and total_voters > 0 else 0.0
+    )
 
     # consensus: every voter ran AND they all agreed
-    consensus = (
-        len(buckets) == 1 and not failures and successful_votes == total_voters
-    )
+    consensus = len(buckets) == 1 and not failures and successful_votes == total_voters
 
     return VoteResult(
         winner=winner,

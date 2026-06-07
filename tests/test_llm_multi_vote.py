@@ -1,6 +1,6 @@
 """Tests for llm-multi-vote."""
-import pytest
-from llm_multi_vote import MultiVote, Ballot, VoteResult, VotingStrategy
+
+from llm_multi_vote import MultiVote, Ballot, VotingStrategy
 
 
 def test_majority_winner():
@@ -71,6 +71,26 @@ def test_scored_strategy_with_scorer():
     mv.add("b", "hello world")
     result = mv.vote()
     assert result.winner == "hello world"
+
+
+def test_scored_strategy_duplicate_model_names():
+    # Two ballots can share a model name; the higher-scored response must
+    # still win even though scores are reported keyed by model.
+    mv = MultiVote(strategy=VotingStrategy.SCORED)
+    mv.add("dup", "low", score=0.1)
+    mv.add("dup", "high", score=0.9)
+    result = mv.vote()
+    assert result.winner == "high"
+
+
+def test_scored_strategy_explicit_zero_score_beats_scorer():
+    # An explicit score of 0.0 must be honored over the fallback scorer.
+    mv = MultiVote(strategy=VotingStrategy.SCORED, scorer=lambda r: 100.0)
+    mv.add("a", "explicit-zero", score=0.0)
+    mv.add("b", "scored-default")
+    result = mv.vote()
+    assert result.winner == "scored-default"
+    assert result.scores["a"] == 0.0
 
 
 def test_consensus_unanimous():

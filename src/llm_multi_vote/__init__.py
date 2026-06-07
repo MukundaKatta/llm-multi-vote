@@ -1,6 +1,7 @@
 """
 llm-multi-vote: Multi-LLM jury voting to select the best response.
 """
+
 from __future__ import annotations
 
 import re
@@ -61,8 +62,12 @@ class MultiVote:
         self._normalize = normalize
         self._ballots: list[Ballot] = []
 
-    def add(self, model: str, response: str, score: Optional[float] = None, **metadata: Any) -> "MultiVote":
-        self._ballots.append(Ballot(model=model, response=response, score=score, metadata=metadata))
+    def add(
+        self, model: str, response: str, score: Optional[float] = None, **metadata: Any
+    ) -> "MultiVote":
+        self._ballots.append(
+            Ballot(model=model, response=response, score=score, metadata=metadata)
+        )
         return self
 
     def clear(self) -> "MultiVote":
@@ -78,7 +83,9 @@ class MultiVote:
 
     def _vote_majority(self) -> VoteResult:
         if not self._ballots:
-            return VoteResult(winner=None, strategy=VotingStrategy.MAJORITY.value, ballots=[])
+            return VoteResult(
+                winner=None, strategy=VotingStrategy.MAJORITY.value, ballots=[]
+            )
         counts: dict[str, list[Ballot]] = {}
         for b in self._ballots:
             counts.setdefault(self._key(b), []).append(b)
@@ -97,33 +104,56 @@ class MultiVote:
 
     def _vote_longest(self) -> VoteResult:
         if not self._ballots:
-            return VoteResult(winner=None, strategy=VotingStrategy.LONGEST.value, ballots=[])
+            return VoteResult(
+                winner=None, strategy=VotingStrategy.LONGEST.value, ballots=[]
+            )
         best = max(self._ballots, key=lambda b: len(b.response))
-        return VoteResult(winner=best.response, strategy=VotingStrategy.LONGEST.value, ballots=list(self._ballots))
+        return VoteResult(
+            winner=best.response,
+            strategy=VotingStrategy.LONGEST.value,
+            ballots=list(self._ballots),
+        )
 
     def _vote_shortest(self) -> VoteResult:
         if not self._ballots:
-            return VoteResult(winner=None, strategy=VotingStrategy.SHORTEST.value, ballots=[])
+            return VoteResult(
+                winner=None, strategy=VotingStrategy.SHORTEST.value, ballots=[]
+            )
         best = min(self._ballots, key=lambda b: len(b.response))
-        return VoteResult(winner=best.response, strategy=VotingStrategy.SHORTEST.value, ballots=list(self._ballots))
+        return VoteResult(
+            winner=best.response,
+            strategy=VotingStrategy.SHORTEST.value,
+            ballots=list(self._ballots),
+        )
 
     def _vote_first(self) -> VoteResult:
         winner = self._ballots[0].response if self._ballots else None
-        return VoteResult(winner=winner, strategy=VotingStrategy.FIRST.value, ballots=list(self._ballots))
+        return VoteResult(
+            winner=winner,
+            strategy=VotingStrategy.FIRST.value,
+            ballots=list(self._ballots),
+        )
 
     def _vote_scored(self) -> VoteResult:
         if not self._ballots:
-            return VoteResult(winner=None, strategy=VotingStrategy.SCORED.value, ballots=[])
+            return VoteResult(
+                winner=None, strategy=VotingStrategy.SCORED.value, ballots=[]
+            )
         scorer = self._scorer
-        scores: dict[str, float] = {}
-        for b in self._ballots:
+
+        def score_of(b: Ballot) -> float:
             if b.score is not None:
-                scores[b.model] = b.score
-            elif scorer is not None:
-                scores[b.model] = scorer(b.response)
-            else:
-                scores[b.model] = 0.0
-        best = max(self._ballots, key=lambda b: scores.get(b.model, 0.0))
+                return b.score
+            if scorer is not None:
+                return scorer(b.response)
+            return 0.0
+
+        # Pair each ballot with its score so selection is independent of
+        # model-name collisions (duplicate model names must not clobber
+        # each other's score during winner selection).
+        scored = [(b, score_of(b)) for b in self._ballots]
+        best = max(scored, key=lambda pair: pair[1])[0]
+        scores: dict[str, float] = {b.model: s for b, s in scored}
         return VoteResult(
             winner=best.response,
             strategy=VotingStrategy.SCORED.value,
@@ -133,7 +163,9 @@ class MultiVote:
 
     def _vote_consensus(self) -> VoteResult:
         if not self._ballots:
-            return VoteResult(winner=None, strategy=VotingStrategy.CONSENSUS.value, ballots=[])
+            return VoteResult(
+                winner=None, strategy=VotingStrategy.CONSENSUS.value, ballots=[]
+            )
         keys = {self._key(b) for b in self._ballots}
         if len(keys) == 1:
             return VoteResult(
@@ -142,7 +174,12 @@ class MultiVote:
                 ballots=list(self._ballots),
                 unanimous=True,
             )
-        return VoteResult(winner=None, strategy=VotingStrategy.CONSENSUS.value, ballots=list(self._ballots), tied=True)
+        return VoteResult(
+            winner=None,
+            strategy=VotingStrategy.CONSENSUS.value,
+            ballots=list(self._ballots),
+            tied=True,
+        )
 
     def vote(self, strategy: Optional[VotingStrategy] = None) -> VoteResult:
         s = strategy or self._strategy
