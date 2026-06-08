@@ -1,5 +1,18 @@
-"""
-llm-multi-vote: Multi-LLM jury voting to select the best response.
+"""llm-multi-vote: Multi-LLM jury voting to select the best response.
+
+This package exposes two complementary APIs:
+
+* The :class:`MultiVote` builder (in this module) collects pre-computed
+  responses and aggregates them with a :class:`VotingStrategy`. Use it when
+  you already have the model outputs in hand.
+* The functional :func:`vote` / :func:`vote_async` API (in
+  :mod:`llm_multi_vote.vote`) *calls* a sequence of voter callables with a
+  prompt, captures per-voter failures, and reports confidence/consensus.
+  Use it when you want the library to invoke the models for you.
+
+The functional API's result type is re-exported here as
+``FunctionalVoteResult`` to avoid colliding with the builder's
+:class:`VoteResult`.
 """
 
 from __future__ import annotations
@@ -9,8 +22,31 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Optional
 
+from .vote import (
+    Strategy,
+    VoteResult as FunctionalVoteResult,
+    default_normalizer,
+    vote,
+    vote_async,
+)
+
 
 class VotingStrategy(str, Enum):
+    """How :class:`MultiVote` selects a winner from collected ballots.
+
+    Members:
+      * ``MAJORITY``: the response shared by the most ballots wins. Ties are
+        reported via ``VoteResult.tied`` and the first such response is
+        returned.
+      * ``LONGEST`` / ``SHORTEST``: pick the ballot with the longest /
+        shortest response string.
+      * ``FIRST``: pick the first ballot added (useful as a baseline).
+      * ``SCORED``: pick the highest-scoring ballot, using each ballot's
+        explicit ``score`` or, when absent, the ``scorer`` callable.
+      * ``CONSENSUS``: a winner is returned only when every ballot agrees;
+        otherwise ``winner`` is ``None`` and ``tied`` is ``True``.
+    """
+
     MAJORITY = "majority"
     LONGEST = "longest"
     SHORTEST = "shortest"
@@ -21,17 +57,43 @@ class VotingStrategy(str, Enum):
 
 @dataclass
 class Ballot:
+    """A single model's response in a vote.
+
+    Attributes:
+      model: Identifier for the model that produced the response.
+      response: The raw response text.
+      score: Optional explicit quality score, used by ``SCORED``.
+      metadata: Arbitrary extra data attached by the caller.
+    """
+
     model: str
     response: str
     score: Optional[float] = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def normalized(self) -> str:
+        """Return the response lower-cased with whitespace collapsed.
+
+        Used as the grouping key for ``MAJORITY``/``CONSENSUS`` so that
+        responses differing only in case or spacing count as equal.
+        """
         return re.sub(r"\s+", " ", self.response.lower().strip())
 
 
 @dataclass
 class VoteResult:
+    """Outcome of a :meth:`MultiVote.vote` call.
+
+    Attributes:
+      winner: The winning response text, or ``None`` when no winner could
+        be determined (e.g. empty input or ``CONSENSUS`` disagreement).
+      strategy: The string value of the strategy that produced this result.
+      ballots: A copy of the ballots that were considered.
+      tied: ``True`` when multiple responses tied for first place.
+      unanimous: ``True`` when every ballot shared the winning response.
+      scores: For ``SCORED``, maps each model name to its computed score.
+    """
+
     winner: Optional[str]
     strategy: str
     ballots: list[Ballot]
@@ -41,10 +103,12 @@ class VoteResult:
 
     @property
     def ballot_count(self) -> int:
+        """Number of ballots considered in this result."""
         return len(self.ballots)
 
     @property
     def models(self) -> list[str]:
+        """The model names of all considered ballots, in ballot order."""
         return [b.model for b in self.ballots]
 
 
@@ -65,17 +129,27 @@ class MultiVote:
     def add(
         self, model: str, response: str, score: Optional[float] = None, **metadata: Any
     ) -> "MultiVote":
+        """Record one model's response and return ``self`` for chaining.
+
+        Args:
+          model: Identifier for the model.
+          response: The model's response text.
+          score: Optional explicit score used by the ``SCORED`` strategy.
+          **metadata: Arbitrary extra fields stored on the ballot.
+        """
         self._ballots.append(
             Ballot(model=model, response=response, score=score, metadata=metadata)
         )
         return self
 
     def clear(self) -> "MultiVote":
+        """Remove all recorded ballots and return ``self`` for chaining."""
         self._ballots.clear()
         return self
 
     @property
     def ballot_count(self) -> int:
+        """Number of ballots recorded so far."""
         return len(self._ballots)
 
     def _key(self, b: Ballot) -> str:
@@ -182,6 +256,12 @@ class MultiVote:
         )
 
     def vote(self, strategy: Optional[VotingStrategy] = None) -> VoteResult:
+        """Aggregate the recorded ballots and return a :class:`VoteResult`.
+
+        Args:
+          strategy: Override the strategy chosen at construction time for
+            this call only. The instance's default is used when ``None``.
+        """
         s = strategy or self._strategy
         dispatch = {
             VotingStrategy.MAJORITY: self._vote_majority,
@@ -199,10 +279,32 @@ class MultiVote:
         strategy: VotingStrategy = VotingStrategy.MAJORITY,
         **kwargs: Any,
     ) -> VoteResult:
+        """One-shot helper: build a vote from a ``{model: response}`` map.
+
+        Args:
+          responses: Mapping of model name to response text. Note that a
+            dict cannot hold duplicate model names; use :meth:`add` if you
+            need several ballots from the same model.
+          strategy: Strategy to aggregate with (defaults to ``MAJORITY``).
+          **kwargs: Forwarded to the :class:`MultiVote` constructor
+            (e.g. ``scorer=`` or ``normalize=``).
+        """
         mv = MultiVote(strategy=strategy, **kwargs)
         for model, resp in responses.items():
             mv.add(model, resp)
         return mv.vote()
 
 
-__all__ = ["MultiVote", "Ballot", "VoteResult", "VotingStrategy"]
+__all__ = [
+    # Builder API
+    "MultiVote",
+    "Ballot",
+    "VoteResult",
+    "VotingStrategy",
+    # Functional API (re-exported from llm_multi_vote.vote)
+    "vote",
+    "vote_async",
+    "Strategy",
+    "default_normalizer",
+    "FunctionalVoteResult",
+]

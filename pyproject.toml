@@ -15,7 +15,17 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MukundaKatta/llm-multi-vote"
+Repository = "https://github.com/MukundaKatta/llm-multi-vote"
+Issues = "https://github.com/MukundaKatta/llm-multi-vote/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -25,3 +35,6 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+llm_multi_vote = ["py.typed"]
