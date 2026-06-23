@@ -1,10 +1,31 @@
-"""Tests for the functional voting API in llm_multi_vote.vote."""
+"""Tests for the functional voting API in llm_multi_vote.vote.
+
+These tests use ``pytest`` features (``pytest.approx``, ``pytest.raises``).
+When the suite is collected by the standard-library ``unittest`` runner in
+an environment without pytest installed, the import below would otherwise
+abort discovery; ``SkipTest`` makes the module skip cleanly instead. The
+equivalent assertions are covered by ``test_unittest_suite.py`` using only
+the standard library, and the full pytest run remains unaffected.
+"""
 
 import asyncio
+import os
+import sys
 
-import pytest
+# Make the src-layout package importable without an editable install (see
+# tests/test_unittest_suite.py for the rationale).
+_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
+if os.path.isdir(_SRC) and _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
 
-from llm_multi_vote.vote import (
+try:
+    import pytest
+except ImportError as exc:  # pragma: no cover - only hit without pytest
+    import unittest
+
+    raise unittest.SkipTest("pytest not installed") from exc
+
+from llm_multi_vote.vote import (  # noqa: E402  (import after sys.path bootstrap)
     Strategy,
     VoteResult,
     default_normalizer,

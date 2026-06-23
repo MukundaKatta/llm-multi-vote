@@ -1,6 +1,15 @@
 """Tests for llm-multi-vote."""
 
-from llm_multi_vote import MultiVote, Ballot, VotingStrategy
+import os
+import sys
+
+# Make the src-layout package importable without an editable install (see
+# tests/test_unittest_suite.py for the rationale).
+_SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
+if os.path.isdir(_SRC) and _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
+from llm_multi_vote import MultiVote, Ballot, VotingStrategy  # noqa: E402
 
 
 def test_majority_winner():
